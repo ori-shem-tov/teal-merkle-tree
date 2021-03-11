@@ -17,7 +17,7 @@ Run:
 ```
 ./test.sh $CREATOR_ADDRESS
 ```
-To run a simple tests that creates the app and appends and validates 8 time (record0,...,record7)
+To run some simple tests that creates the app and appends and validates 8 time (record0,...,record7)
 
 ## Usage
 
