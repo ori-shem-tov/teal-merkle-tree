@@ -1,5 +1,4 @@
 from pyteal import *
-from algosdk import *
 
 COMMAND_INDEX = 0
 CURRENT_ROOT_INDEX = 1
