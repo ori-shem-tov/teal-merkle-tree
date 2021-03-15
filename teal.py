@@ -1,13 +1,23 @@
 from pyteal import *
+from algosdk.v2client import algod
+import os
+import json
 
-COMMAND_INDEX = 0
-CURRENT_ROOT_INDEX = 1
-NEW_ROOT_INDEX = 2
-VALUE_INDEX = 3
-MAX_APP_ARGS = VALUE_INDEX + 4
+# App args constants
+COMMAND_INDEX = 0  # index of command in app args slice
+CURRENT_ROOT_INDEX = 1  # index of current root in app args slice
+NEW_ROOT_INDEX = 2  # index of new root in app args slice
+VALUE_INDEX = 3  # index of value to validate/append in app args slice
 
-APP_GROUP_IDX = 0
-SC_GROUP_IDX = 1
+TREE_HEIGHT = 3  # merkle tree height. leaves are height 0. min: 3, max: 12
+MAX_APP_ARGS = VALUE_INDEX + TREE_HEIGHT + 1  # number of app args
+
+# Transactions group constants
+GROUP_SIZE = 3
+APP_GROUP_IDX = 0  # index of app call in group
+PAYMENT_GROUP_IDX = 1  # index of payment transaction to the smart contract
+SC_GROUP_IDX = 2  # index of smart contract txn in group
+STATELESS_ADDRESS = ''
 
 
 # creates expressions to concat and hash nodes in the merkle tree
@@ -21,14 +31,14 @@ def concat_and_hash(txn: TxnObject, i: int, scratch_var: ScratchVar):
                  scratch_var.store(Sha256(concat_to_right_sibling)),
                  scratch_var.store(Sha256(concat_to_left_sibling)),
                  ),
-              If(scratch_var.load() == Bytes(''),
+              If(scratch_var.load() == Bytes(''),  # checks if we're in an empty subtree
                  scratch_var.store(Bytes('')),
                  scratch_var.store(Sha256(scratch_var.load()))
                  )
               )
 
 
-def approval():
+def approval(smart_contract_address: str):
     on_creation = Seq([
         App.globalPut(Bytes('Creator'), Txn.sender()),  # set creator
         App.globalPut(Bytes('Root'), Bytes('')),  # init root
@@ -39,9 +49,10 @@ def approval():
     sc_txn = Gtxn[SC_GROUP_IDX]  # get the stateless smart contract txn
 
     test_group = And(
-        Global.group_size() == Int(2),
+        Global.group_size() == Int(GROUP_SIZE),
         Txn.group_index() == Int(APP_GROUP_IDX),  # app call should be 1st in group
-        sc_txn.type_enum() == EnumInt('pay')
+        sc_txn.type_enum() == EnumInt('pay'),
+        sc_txn.sender() == Addr(smart_contract_address),
     )
     test_txn = And(
         Txn.amount() == Int(0),
@@ -84,19 +95,23 @@ def clear_state_program():
 
 def stateless():
     app_txn = Gtxn[APP_GROUP_IDX]
+    fee_payment_txn = Gtxn[PAYMENT_GROUP_IDX]
     test_group = And(
-        Global.group_size() == Int(2),
+        Global.group_size() == Int(GROUP_SIZE),
         Txn.group_index() == Int(SC_GROUP_IDX),  # stateless smart contract txn should be 2nd in group
-        app_txn.type_enum() == EnumInt('appl')
+        app_txn.type_enum() == EnumInt('appl'),
+        fee_payment_txn.amount() == Txn.fee(),
+        fee_payment_txn.type_enum() == EnumInt('pay'),
+        fee_payment_txn.receiver() == Txn.sender(),
     )
     test_txn = And(
         Txn.amount() == Int(0),
         Txn.type_enum() == EnumInt('pay'),
         Txn.close_remainder_to() == Global.zero_address(),
-        Txn.rekey_to() == Global.zero_address()
+        Txn.rekey_to() == Global.zero_address(),
     )
     test_args = app_txn.application_args.length() == Int(MAX_APP_ARGS)
-    
+
     sv = ScratchVar(TealType.bytes)
 
     validate = Seq(
@@ -125,7 +140,7 @@ def stateless():
 
     compute_root_after_append = Seq(
         [
-            sv.store(Sha256(app_txn.application_args[VALUE_INDEX])), # init sv to hold the hash of value to append
+            sv.store(Sha256(app_txn.application_args[VALUE_INDEX])),  # init sv to hold the hash of value to append
             Seq(  # concat with provided siblings along path to root
                 [
                     concat_and_hash(app_txn, i, sv) for i in range(VALUE_INDEX + 1, MAX_APP_ARGS)
@@ -150,14 +165,30 @@ def stateless():
 
 
 if __name__ == '__main__':
-    with open('mt_approval.teal', 'w') as f:
-        compiled = compileTeal(approval(), Mode.Application)
+    algod_url = os.getenv('MT_ALGOD_URL')
+    algod_token = os.getenv('MT_ALGOD_TOKEN')
+    if algod_url == '':
+        print('please export MT_ALGOD_URL and MT_ALGOD_TOKEN environment variables to a valid v2 algod client')
+        exit(1)
+    print(f'starting algod client: {algod_url}')
+    algod_client = algod.AlgodClient(algod_token, algod_url)
+    res = None
+    with open('stateless.teal', 'w') as f:
+        compiled = compileTeal(stateless(), Mode.Signature)
         f.write(compiled)
+        print('compiled stateless.teal')
+        try:
+            res = algod_client.compile(compiled)
+        except Exception as e:
+            print(f'error compiling stateless TEAL {e}')
+            exit(1)
+    print(f'smart contract address: {res["hash"]}')
+    with open('mt_approval.teal', 'w') as f:
+        compiled = compileTeal(approval(res['hash']), Mode.Application)
+        f.write(compiled)
+        print('compiled mt_approval.teal')
 
     with open('mt_clear.teal', 'w') as f:
         compiled = compileTeal(clear_state_program(), Mode.Application)
         f.write(compiled)
-
-    with open('stateless.teal', 'w') as f:
-        compiled = compileTeal(stateless(), Mode.Signature)
-        f.write(compiled)
+        print('compiled mt_clear.teal')

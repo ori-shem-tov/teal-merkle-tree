@@ -1,1 +1,10 @@
 .idea
+__pycache__
+*.tx
+*.tx.out
+*.teal
+*.msgp
+*.grp
+*.sig
+*.rej
+*.tok
