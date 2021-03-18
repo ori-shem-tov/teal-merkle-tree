@@ -1,7 +1,6 @@
 from pyteal import *
 from algosdk.v2client import algod
 import os
-import json
 
 # App args constants
 COMMAND_INDEX = 0  # index of command in app args slice

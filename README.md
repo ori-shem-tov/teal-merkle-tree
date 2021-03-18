@@ -5,17 +5,6 @@ Install requirements.txt
 pip install -r requirements.txt
 ```
 
-This app is using `ScratchVar` from pyteal which is not supported yet on latest release (v0.6.1).
-
-This means cloning [pyteal](https://github.com/algorand/pyteal) repo is needed:
-```
-git clone git@github.com:algorand/pyteal.git
-cd pyteal
-pip install .
-```
-
-Note that this is tested with commit `120202cf73b43612426a054d5b731320d13bfdf1`
-
 ## Usage
 First you'll need to export `MT_ALGOD_URL` and `MT_ALGOD_TOKEN` environment variables to match a valid v2 algod client.
 
