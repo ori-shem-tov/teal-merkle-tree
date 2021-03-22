@@ -113,51 +113,37 @@ def stateless():
 
     sv = ScratchVar(TealType.bytes)
 
-    validate = Seq(
-        [
-            sv.store(Sha256(app_txn.application_args[VALUE_INDEX])),  # init sv to hold the hash of value to validate
-            Seq(  # concat with provided siblings along path to root
-                [
-                    concat_and_hash(app_txn, i, sv) for i in range(VALUE_INDEX + 1, MAX_APP_ARGS)
-                ]
-            ),
-            sv.load() == app_txn.application_args[CURRENT_ROOT_INDEX]  # check that result is matching the expected root
-        ]
-    )
-
-    compute_root_before_append = Seq(
-        [
-            sv.store(Bytes('')),  # init sv to be empty. used to reduce hash calls in record-less subtrees
-            Seq(  # concat with provided siblings along path to root
-                [
-                    concat_and_hash(app_txn, i, sv) for i in range(VALUE_INDEX + 1, MAX_APP_ARGS)
-                ]
-            ),
-            sv.load() == app_txn.application_args[CURRENT_ROOT_INDEX]  # check that result is matching the expected root
-        ]
-    )
-
-    compute_root_after_append = Seq(
-        [
-            sv.store(Sha256(app_txn.application_args[VALUE_INDEX])),  # init sv to hold the hash of value to append
-            Seq(  # concat with provided siblings along path to root
-                [
-                    concat_and_hash(app_txn, i, sv) for i in range(VALUE_INDEX + 1, MAX_APP_ARGS)
-                ]
-            ),
-            sv.load() == app_txn.application_args[NEW_ROOT_INDEX]  # check that result is matching the expected new root
-        ]
-    )
-
-    append = And(
-        compute_root_before_append,
-        compute_root_after_append
-    )
-
-    program = Cond(
-        [Not(And(test_group, test_txn, test_args)), Return(Int(0))],
-        [app_txn.application_args[COMMAND_INDEX] == Bytes('validate'), Return(validate)],
-        [app_txn.application_args[COMMAND_INDEX] == Bytes('append'), Return(append)],
+    program = If(
+        Not(And(test_group, test_txn, test_args)),
+        Return(Int(0)),
+        Seq(
+            [
+                If(app_txn.application_args[COMMAND_INDEX] == Bytes('append'),
+                   sv.store(Bytes('')),
+                   sv.store(Sha256(app_txn.application_args[VALUE_INDEX]))),
+                Seq(  # concat with provided siblings along path to root
+                    [
+                        concat_and_hash(app_txn, i, sv) for i in range(VALUE_INDEX + 1, MAX_APP_ARGS)
+                    ]
+                ),
+                If(app_txn.application_args[COMMAND_INDEX] == Bytes('validate'),
+                   Return(sv.load() == app_txn.application_args[CURRENT_ROOT_INDEX]),
+                   If(sv.load() == app_txn.application_args[CURRENT_ROOT_INDEX],
+                      Seq(
+                          [
+                              sv.store(Sha256(app_txn.application_args[VALUE_INDEX])),
+                              Seq(  # concat with provided siblings along path to root
+                                  [
+                                      concat_and_hash(app_txn, i, sv) for i in range(VALUE_INDEX + 1, MAX_APP_ARGS)
+                                  ]
+                              ),
+                              Return(sv.load() == app_txn.application_args[NEW_ROOT_INDEX])
+                          ]
+                      ),
+                      Return(sv.load() == app_txn.application_args[NEW_ROOT_INDEX]))
+                   )
+            ]
+        )
     )
 
     return program
