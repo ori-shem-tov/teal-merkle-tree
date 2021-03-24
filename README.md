@@ -19,12 +19,14 @@ goal app create --creator $CREATOR_ADDRESS --approval-prog ./mt_approval.teal --
 ```
 This will create the stateful app with 2 global `byte slices` and 1 global `int`
 
-***You'll need to fund the stateless smart contract account in order to meet the minimum balance.**
+***You'll need to fund the stateless smart contract accounts in order to meet the minimum balance.**
 
-Then you'll need to create groups of 3 transactions where:
+Then you'll need to create groups of 5 transactions where:
 - The 1st transaction is the app call
-- The 2nd is paying the fee to the smart contract
-- The 3rd is the stateless teal call
+- The 2nd is paying the fee to the validation smart contract
+- The 3rd is the validation stateless teal call
+- The 4th is paying the fee to the appending smart contract
+- The 5th is the appending stateless teal call
 
 ### Changing tree height
 
@@ -93,15 +95,17 @@ First, generate the TEAL scripts.
 
 Then, run:
 ```
-./test.sh $CREATOR_ADDRESS $SMART_CONTRACT_ADDRESS
+./test.sh $CREATOR_ADDRESS $VALIDATE_SC_ADDRESS $APPEND_SC_ADDRESS
 ```
 to run some simple tests that creates the app and appends and validates 8 time (record0,...,record7).
 
 - `CREATOR_ADDRESS` - account to create the stateful TEAL
 
-- `SMART_CONTRACT_ADDRESS` - the stateless smart contract address
+- `VALIDATE_SC_ADDRESS` - the validation stateless smart contract address
 
-Make sure `CREATOR_ADDRESS` and `SMART_CONTRACT_ADDRESS` are funded to meet the minimum balance constraint.
+- `APPEND_SC_ADDRESS` - the appending stateless smart contract address
+
+Make sure `CREATOR_ADDRESS`, `VALIDATE_SC_ADDRESS` and `APPEND_SC_ADDRESS` are funded to meet the minimum balance constraint.
 
 ## Visualization
 
