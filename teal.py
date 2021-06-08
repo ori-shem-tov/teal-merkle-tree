@@ -6,7 +6,7 @@ import os
 COMMAND_INDEX = 0  # index of command in app args slice
 CURRENT_ROOT_INDEX = 1  # index of current root in app args slice
 NEW_ROOT_INDEX = 2  # index of new root in app args slice
-VALUE_INDEX = 3  # index of value to validate/append in app args slice
+VALUE_INDEX = 3  # index of value to verify/append in app args slice
 
 TREE_HEIGHT = 3  # merkle tree height. leaves are height 0. min: 3, max: 11
 MAX_APP_ARGS = VALUE_INDEX + TREE_HEIGHT + 1  # number of app args
@@ -15,8 +15,8 @@ MAX_APP_ARGS = VALUE_INDEX + TREE_HEIGHT + 1  # number of app args
 GROUP_SIZE = 5
 APP_GROUP_IDX = 0  # index of app call in group
 PAYMENT_GROUP_IDX = 1  # index of payment transaction to the smart contract
-VALIDATE_FEE_PAYMENT_GROUP_IDX = 1  # index of payment transaction to the validate smart contract
-VALIDATE_SC_GROUP_IDX = 2  # index of validate smart contract txn in group
+VERIFY_FEE_PAYMENT_GROUP_IDX = 1  # index of payment transaction to the verify smart contract
+VERIFY_SC_GROUP_IDX = 2  # index of verify smart contract txn in group
 APPEND_FEE_PAYMENT_GROUP_IDX = 3  # index of payment transaction to the append smart contract
 APPEND_SC_GROUP_IDX = 4  # index of append smart contract txn in group
 
@@ -39,7 +39,7 @@ def concat_and_hash(txn: TxnObject, i: int, scratch_var: ScratchVar):
               )
 
 
-def approval(validate_sc_addr: str, append_sc_addr: str):
+def approval(verify_sc_addr: str, append_sc_addr: str):
     on_creation = Seq([
         App.globalPut(Bytes('Creator'), Txn.sender()),  # set creator
         App.globalPut(Bytes('Root'), Bytes('')),  # init root
@@ -47,14 +47,14 @@ def approval(validate_sc_addr: str, append_sc_addr: str):
         Return(Int(1)),
     ])
 
-    validate_sc_txn = Gtxn[VALIDATE_SC_GROUP_IDX]  # get the validate stateless smart contract txn
+    verify_sc_txn = Gtxn[VERIFY_SC_GROUP_IDX]  # get the verify stateless smart contract txn
     append_sc_txn = Gtxn[APPEND_SC_GROUP_IDX]  # get the append stateless smart contract txn
 
     test_group = And(
         Global.group_size() == Int(GROUP_SIZE),
         Txn.group_index() == Int(APP_GROUP_IDX),  # app call should be 1st in group
-        validate_sc_txn.type_enum() == EnumInt('pay'),
-        validate_sc_txn.sender() == Addr(validate_sc_addr),
+        verify_sc_txn.type_enum() == EnumInt('pay'),
+        verify_sc_txn.sender() == Addr(verify_sc_addr),
         append_sc_txn.type_enum() == EnumInt('pay'),
         append_sc_txn.sender() == Addr(append_sc_addr),
     )
@@ -64,8 +64,8 @@ def approval(validate_sc_addr: str, append_sc_addr: str):
         Txn.close_remainder_to() == Global.zero_address(),
         Txn.rekey_to() == Global.zero_address()
     )
-    test_args = Txn.application_args.length() == Int(MAX_APP_ARGS)  # validate fixed number of app args
-    test_root = App.globalGet(Bytes('Root')) == Txn.application_args[CURRENT_ROOT_INDEX]  # validate root
+    test_args = Txn.application_args.length() == Int(MAX_APP_ARGS)  # verify fixed number of app args
+    test_root = App.globalGet(Bytes('Root')) == Txn.application_args[CURRENT_ROOT_INDEX]  # verify root
 
     inc_size = Seq([
         App.globalPut(Bytes('Size'), Int(1) + App.globalGet(Bytes('Size')))
@@ -83,7 +83,7 @@ def approval(validate_sc_addr: str, append_sc_addr: str):
         [Txn.on_completion() == EnumInt('OptIn'), Return(Int(1))],
         [Not(And(test_group, test_txn, test_args, test_root)), Return(Int(0))],
         [Txn.application_args[COMMAND_INDEX] == Bytes('append'), Return(append)],
-        [Txn.application_args[COMMAND_INDEX] == Bytes('validate'), Return(Int(1))]
+        [Txn.application_args[COMMAND_INDEX] == Bytes('verify'), Return(Int(1))]
     )
 
     return program
@@ -97,12 +97,12 @@ def clear_state_program():
     return program
 
 
-def stateless_validate():
+def stateless_verify():
     app_txn = Gtxn[APP_GROUP_IDX]
-    fee_payment_txn = Gtxn[VALIDATE_FEE_PAYMENT_GROUP_IDX]
+    fee_payment_txn = Gtxn[VERIFY_FEE_PAYMENT_GROUP_IDX]
     test_group = And(
         Global.group_size() == Int(GROUP_SIZE),
-        Txn.group_index() == Int(VALIDATE_SC_GROUP_IDX),
+        Txn.group_index() == Int(VERIFY_SC_GROUP_IDX),
         app_txn.type_enum() == EnumInt('appl'),
         fee_payment_txn.amount() == Txn.fee(),
         fee_payment_txn.type_enum() == EnumInt('pay'),
@@ -122,8 +122,8 @@ def stateless_validate():
         [
             sv.store(Bytes('')),
             If(
-                app_txn.application_args[COMMAND_INDEX] == Bytes('validate'),
-                sv.store(Sha256(app_txn.application_args[VALUE_INDEX])),  # init sv to hold hash of value to validate
+                app_txn.application_args[COMMAND_INDEX] == Bytes('verify'),
+                sv.store(Sha256(app_txn.application_args[VALUE_INDEX])),  # init sv to hold hash of value to verify
             ),
             Seq(  # concat with provided siblings along path to root
                 [
@@ -138,7 +138,7 @@ def stateless_validate():
         [Not(And(test_group, test_txn, test_args)), Return(Int(0))],
         [
             Or(
-                app_txn.application_args[COMMAND_INDEX] == Bytes('validate'),
+                app_txn.application_args[COMMAND_INDEX] == Bytes('verify'),
                 app_txn.application_args[COMMAND_INDEX] == Bytes('append'),
             ),
             Return(logic)
@@ -184,7 +184,7 @@ def stateless_append():
     program = Cond(
         [Not(And(test_group, test_txn, test_args)), Return(Int(0))],
         [app_txn.application_args[COMMAND_INDEX] == Bytes('append'), Return(logic)],
-        [app_txn.application_args[COMMAND_INDEX] == Bytes('validate'), Return(Int(1))]
+        [app_txn.application_args[COMMAND_INDEX] == Bytes('verify'), Return(Int(1))]
     )
 
     return program
@@ -199,17 +199,17 @@ if __name__ == '__main__':
     print(f'starting algod client: {algod_url}')
     algod_client = algod.AlgodClient(algod_token, algod_url)
     res = None
-    with open('validate_sc.teal', 'w') as f:
-        compiled = compileTeal(stateless_validate(), Mode.Signature)
+    with open('verify_sc.teal', 'w') as f:
+        compiled = compileTeal(stateless_verify(), Mode.Signature)
         f.write(compiled)
-        print('validate_sc.teal')
+        print('verify_sc.teal')
         try:
             res = algod_client.compile(compiled)
         except Exception as e:
             print(f'error compiling stateless TEAL {e}')
             exit(1)
-    validate_sc_addr = res["hash"]
-    print(f'validate smart contract address: {validate_sc_addr}')
+    verify_sc_addr = res["hash"]
+    print(f'verify smart contract address: {verify_sc_addr}')
     with open('append_sc.teal', 'w') as f:
         compiled = compileTeal(stateless_append(), Mode.Signature)
         f.write(compiled)
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     append_sc_addr = res["hash"]
     print(f'append smart contract address: {append_sc_addr}')
     with open('mt_approval.teal', 'w') as f:
-        compiled = compileTeal(approval(validate_sc_addr, append_sc_addr), Mode.Application)
+        compiled = compileTeal(approval(verify_sc_addr, append_sc_addr), Mode.Application)
         f.write(compiled)
         print('compiled mt_approval.teal')
 

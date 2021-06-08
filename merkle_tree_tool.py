@@ -42,19 +42,19 @@ class Node:
             return 0, right[1] + [f'b64:{sib.decode()}']
         return -1, []
 
-    def validate(self, value):
+    def verify(self, value):
         if self.height == 0:
             if self.value.digest() == hashlib.sha256(value.encode('utf-8')).digest():
                 return 0, [f'str:{value}']
             else:
                 return -1, []
-        left = self.left_sibling.validate(value)
+        left = self.left_sibling.verify(value)
         if left[0] == 0:
             sib = b''
             if self.right_sibling.value != b'':
                 sib = base64.b64encode(b'\xaa' + self.right_sibling.value.digest())
             return 0, left[1] + [f'b64:{sib.decode()}']
-        right = self.right_sibling.validate(value)
+        right = self.right_sibling.verify(value)
         if right[0] == 0:
             sib = base64.b64encode(b'\xbb' + self.left_sibling.value.digest())
             return 0, right[1] + [f'b64:{sib.decode()}']
@@ -78,9 +78,9 @@ class MerkleTree:
         args = ['str:append', old_root, new_root] + path
         return '--app-arg ' + ' --app-arg '.join([f'"{arg}"' for arg in args])
 
-    def validate(self, value: str):
-        ok, path = self.root.validate(value)
+    def verify(self, value: str):
+        ok, path = self.root.verify(value)
         if ok != 0:
             return []
-        args = ['str:validate', self.root.get_value(), 'b64:'] + path
+        args = ['str:verify', self.root.get_value(), 'b64:'] + path
         return '--app-arg ' + ' --app-arg '.join([f'"{arg}"' for arg in args])

@@ -6,7 +6,7 @@ usage() {
     echo ""
     echo "Usage:"
     echo ""
-    echo "  $0 \$APP_CREATOR_ADDRESS \$VALIDATE_SC_ADDRESS \$APPEND_SC_ADDRESS"
+    echo "  $0 \$APP_CREATOR_ADDRESS \$VERIFY_SC_ADDRESS \$APPEND_SC_ADDRESS"
     echo ""
     echo ""
 }
@@ -17,7 +17,7 @@ if [ $# -ne 3 ]; then
 fi
 
 creator=$1
-validate_sc_addr=$2
+verify_sc_addr=$2
 append_sc_addr=$3
 
 # create app
@@ -26,13 +26,13 @@ app_id=$(goal app create --creator $creator --approval-prog ./mt_approval.teal -
 echo "Created app $app_id"
 
 function group_sign_and_send {
-  # validate smart contract call
-  echo "Creating validate smart contract call"
-  goal clerk send -a 0 -F validate_sc.teal -t $validate_sc_addr -o validate_sc.tx
+  # verify smart contract call
+  echo "Creating verify smart contract call"
+  goal clerk send -a 0 -F verify_sc.teal -t $verify_sc_addr -o verify_sc.tx
 
-  # payment to validate smart contract
-  echo "Creating fee payment txn to the validate smart contract"
-  goal clerk send -a 1000 -f $creator -t $validate_sc_addr -o validate_fee_payment.tx
+  # payment to verify smart contract
+  echo "Creating fee payment txn to the verify smart contract"
+  goal clerk send -a 1000 -f $creator -t $verify_sc_addr -o verify_fee_payment.tx
 
   # append smart contract call
   echo "Creating append smart contract call"
@@ -44,7 +44,7 @@ function group_sign_and_send {
 
   # group
   echo "Grouping them together"
-  cat app.tx validate_fee_payment.tx validate_sc.tx append_fee_payment.tx append_sc.tx > group.tx
+  cat app.tx verify_fee_payment.tx verify_sc.tx append_fee_payment.tx append_sc.tx > group.tx
   goal clerk group -i group.tx -o group.tx.out
 
   # split
@@ -100,7 +100,7 @@ function append {
 
 }
 
-function validate {
+function verify {
   current_root=$1
   new_root=$2
   record=$3
@@ -116,10 +116,10 @@ function validate {
   sib10=${13}
   sib11=${14}
 
-  echo "validating $record"
+  echo "verifying $record"
   goal app call \
     --app-id $app_id \
-    --app-arg "str:validate" \
+    --app-arg "str:verify" \
     --app-arg "b64:$current_root" \
     --app-arg "b64:" \
     --app-arg "str:$record" \
@@ -133,34 +133,34 @@ function validate {
 }
 
 append "" "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "record0" "" "" ""
-validate "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "" "record0" "" "" ""
+verify "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "" "record0" "" "" ""
 
 append "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "" ""
-validate "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "" ""
+verify "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "" ""
 
 append "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "record2" "" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
-validate "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "" "record2" "" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
+verify "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "" "record2" "" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
 
 append "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
-validate "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
+verify "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
 
 append "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "record4" "" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "" "record4" "" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "" "record4" "" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
 
 append "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
 
 append "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "record6" "" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "" "record6" "" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "" "record6" "" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
 
 append "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
 
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record0" "qu0AOo9K4Xej8xNE6RClMgwuzlcvi3hgFC17fBOKL6hQ" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record2" "qlU+XIurZ96YJ7hPo2graSpKwnNUL6yvx48ly2TAhJjH" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record4" "qthHJFPMJC6Dc06ENnmKQI/2+oeWH5/cLKTWaIDUgita" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record6" "qhRxHkgVYhMAPe10rIAsSc1zscHRE+NZmlVOsJ8lTzO1" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-validate "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record0" "qu0AOo9K4Xej8xNE6RClMgwuzlcvi3hgFC17fBOKL6hQ" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record2" "qlU+XIurZ96YJ7hPo2graSpKwnNUL6yvx48ly2TAhJjH" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record4" "qthHJFPMJC6Dc06ENnmKQI/2+oeWH5/cLKTWaIDUgita" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record6" "qhRxHkgVYhMAPe10rIAsSc1zscHRE+NZmlVOsJ8lTzO1" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"

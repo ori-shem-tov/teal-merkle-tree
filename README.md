@@ -23,8 +23,8 @@ This will create the stateful app with 2 global `byte slices` and 1 global `int`
 
 Then you'll need to create groups of 5 transactions where:
 - The 1st transaction is the app call
-- The 2nd is paying the fee to the validation smart contract
-- The 3rd is the validation stateless teal call
+- The 2nd is paying the fee to the verification smart contract
+- The 3rd is the verification stateless teal call
 - The 4th is paying the fee to the appending smart contract
 - The 5th is the appending stateless teal call
 
@@ -34,7 +34,7 @@ In order to change the tree height you'll need to change the `TREE_HEIGHT` varia
 
 ### App args schematics
 
-This implementation supports 2 actions: `append` and `validate`.
+This implementation supports 2 actions: `append` and `verify`.
 
 Both actions expect the same number of app args.
 We'll assume 7 app args in the next demonstration (tree height = 3, maximum 8 records)
@@ -58,14 +58,14 @@ Note that empty leaf sibling and subtree siblings with only empty leaves should 
 
 Non-empty siblings should also include a first byte stating if it's a right (0xaa) or left (0xbb) sibling.
 
-#### Validate
-app-arg #0: `str:validate` stating the wanted action.
+#### Verify
+app-arg #0: `str:verify` stating the wanted action.
 
 app-arg #1: `b64:$CURRENT_ROOT` the `base64` encoding the current root before appending
 
 app-arg #2: `b64:` ignored for this action, since this is a read-only action
 
-app-arg #3: `str:$VALUE` the string representation of the value to validate
+app-arg #3: `str:$VALUE` the string representation of the value to verify
 
 app-arg #4: `b64:$FIRST_SIBLING_HASH` the `base64` encoding of the `sha256` of the first sibling.
 
@@ -86,7 +86,7 @@ In order to use the tool, you'll need to create an instance of the `MerkleTree` 
 `MerkleTree` has 2 methods:
 
 - **append** - appends the given value to the merkle tree and returns a string of app args for the stateful TEAL `append` app call. 
-- **validate** - finds the given value in the merkle tree and returns a string of app args for the stateful TEAL `validate` app call.
+- **verify** - finds the given value in the merkle tree and returns a string of app args for the stateful TEAL `verify` app call.
 
 An example of use is available in `example_mt_tool.py`
 
@@ -95,17 +95,17 @@ First, generate the TEAL scripts.
 
 Then, run:
 ```
-./test.sh $CREATOR_ADDRESS $VALIDATE_SC_ADDRESS $APPEND_SC_ADDRESS
+./test.sh $CREATOR_ADDRESS $VERIFY_SC_ADDRESS $APPEND_SC_ADDRESS
 ```
-to run some simple tests that creates the app and appends and validates 8 time (record0,...,record7).
+to run some simple tests that creates the app and appends and verifies 8 time (record0,...,record7).
 
 - `CREATOR_ADDRESS` - account to create the stateful TEAL
 
-- `VALIDATE_SC_ADDRESS` - the validation stateless smart contract address
+- `VERIFY_SC_ADDRESS` - the verification stateless smart contract address
 
 - `APPEND_SC_ADDRESS` - the appending stateless smart contract address
 
-Make sure `CREATOR_ADDRESS`, `VALIDATE_SC_ADDRESS` and `APPEND_SC_ADDRESS` are funded to meet the minimum balance constraint.
+Make sure `CREATOR_ADDRESS`, `VERIFY_SC_ADDRESS` and `APPEND_SC_ADDRESS` are funded to meet the minimum balance constraint.
 
 ## Visualization
 

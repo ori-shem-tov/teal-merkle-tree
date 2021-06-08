@@ -1,13 +1,14 @@
 from merkle_tree_tool import MerkleTree
 
 if __name__ == '__main__':
-    mt = MerkleTree(3)
-    for i in range(8):
-        print(f'appending record{i}')
+    tree_height = 3
+    mt = MerkleTree(tree_height)
+    for i in range(2**tree_height):
         args = mt.append(f'record{i}')
         print(args)
+        args = mt.verify(f'record{i}')
+        print(args)
 
-    for i in range(8):
-        print(f'validating record{i}')
-        args = mt.validate(f'record{i}')
+    for i in range(2**tree_height):
+        args = mt.verify(f'record{i}')
         print(args)
