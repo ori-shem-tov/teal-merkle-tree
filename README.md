@@ -1,4 +1,7 @@
 # Merkle Trees
+
+Link to Solution in the dev portal: [https://developer.algorand.org/solutions/storing-a-large-amount-of-data-on-the-blockchain-using-merkle-trees/](https://developer.algorand.org/solutions/storing-a-large-amount-of-data-on-the-blockchain-using-merkle-trees/)
+
 ## Requirements
 Install requirements.txt
 ```
@@ -6,76 +9,20 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-First you'll need to export `MT_ALGOD_URL` and `MT_ALGOD_TOKEN` environment variables to match a valid v2 algod client.
-
-Then, to generate the TEAL scripts run:
+Generate the TEAL scripts:
 ```
 python teal.py
 ```
 
 Create the app using goal:
 ```
-goal app create --creator $CREATOR_ADDRESS --approval-prog ./mt_approval.teal --global-byteslices 2 --global-ints 1 --local-byteslices 0 --local-ints 0 --clear-prog ./mt_clear.teal
+goal app create --creator $CREATOR_ADDRESS --approval-prog ./mt_approval5.teal --global-byteslices 1 --global-ints 1 --local-byteslices 0 --local-ints 0 --clear-prog ./mt_clear.teal
 ```
-This will create the stateful app with 2 global `byte slices` and 1 global `int`
-
-***You'll need to fund the stateless smart contract accounts in order to meet the minimum balance.**
-
-Then you'll need to create groups of 5 transactions where:
-- The 1st transaction is the app call
-- The 2nd is paying the fee to the verification smart contract
-- The 3rd is the verification stateless teal call
-- The 4th is paying the fee to the appending smart contract
-- The 5th is the appending stateless teal call
+This will create the stateful app with 1 global `byte slices` and 1 global `int`
 
 ### Changing tree height
 
 In order to change the tree height you'll need to change the `TREE_HEIGHT` variable in `teal.py`
-
-### App args schematics
-
-This implementation supports 2 actions: `append` and `verify`.
-
-Both actions expect the same number of app args.
-We'll assume 7 app args in the next demonstration (tree height = 3, maximum 8 records)
-
-#### Append
-app-arg #0: `str:append` stating the wanted action.
-
-app-arg #1: `b64:$CURRENT_ROOT` the `base64` encoding the current root before appending
-
-app-arg #2: `b64:$NEW_ROOT` the `base64` encoding the new root after appending
-
-app-arg #3: `str:$VALUE` the string representation of the value to append
-
-app-arg #4: `b64:$FIRST_SIBLING_HASH` the `base64` encoding of the `sha256` of the first sibling.
-
-app-arg #5: `b64:$SECOND_SIBLING_HASH` the `base64` encoding of the `sha256` of the second sibling.
-
-app-arg #6: `b64:$THIRD_SIBLING_HASH` the `base64` encoding of the `sha256` of the third sibling.
-
-Note that empty leaf sibling and subtree siblings with only empty leaves should be passed as empty byte slices.
-
-Non-empty siblings should also include a first byte stating if it's a right (0xaa) or left (0xbb) sibling.
-
-#### Verify
-app-arg #0: `str:verify` stating the wanted action.
-
-app-arg #1: `b64:$CURRENT_ROOT` the `base64` encoding the current root before appending
-
-app-arg #2: `b64:` ignored for this action, since this is a read-only action
-
-app-arg #3: `str:$VALUE` the string representation of the value to verify
-
-app-arg #4: `b64:$FIRST_SIBLING_HASH` the `base64` encoding of the `sha256` of the first sibling.
-
-app-arg #5: `b64:$SECOND_SIBLING_HASH` the `base64` encoding of the `sha256` of the second sibling.
-
-app-arg #6: `b64:$THIRD_SIBLING_HASH` the `base64` encoding of the `sha256` of the third sibling.
-
-Note that empty leaf sibling and subtree siblings with only empty leaves should be passed as empty byte slices.
-
-Non-empty siblings should also include a first byte stating if it's a right (0xaa) or left (0xbb) sibling.
 
 ## Merkle tree helper tool
 
@@ -83,10 +30,12 @@ In this repo you'll also find `merkle_tree.py` which helps you generate the argu
 
 In order to use the tool, you'll need to create an instance of the `MerkleTree` object with the desired height.
 
-`MerkleTree` has 2 methods:
+`MerkleTree` has 3 methods:
 
 - **append** - appends the given value to the merkle tree and returns a string of app args for the stateful TEAL `append` app call. 
 - **verify** - finds the given value in the merkle tree and returns a string of app args for the stateful TEAL `verify` app call.
+- **update** - finds the given old value in the merkle tree, replaces it with the given new value and returns a string of app args for the stateful TEAL `update` app call.
+
 
 An example of use is available in `example_mt_tool.py`
 
@@ -95,17 +44,13 @@ First, generate the TEAL scripts.
 
 Then, run:
 ```
-./test.sh $CREATOR_ADDRESS $VERIFY_SC_ADDRESS $APPEND_SC_ADDRESS
+./test.sh $CREATOR_ADDRESS
 ```
 to run some simple tests that creates the app and appends and verifies 8 time (record0,...,record7).
 
 - `CREATOR_ADDRESS` - account to create the stateful TEAL
 
-- `VERIFY_SC_ADDRESS` - the verification stateless smart contract address
-
-- `APPEND_SC_ADDRESS` - the appending stateless smart contract address
-
-Make sure `CREATOR_ADDRESS`, `VERIFY_SC_ADDRESS` and `APPEND_SC_ADDRESS` are funded to meet the minimum balance constraint.
+Make sure `CREATOR_ADDRESS` is funded to meet the minimum balance constraint.
 
 ## Visualization
 

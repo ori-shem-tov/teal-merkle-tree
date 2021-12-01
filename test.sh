@@ -6,161 +6,224 @@ usage() {
     echo ""
     echo "Usage:"
     echo ""
-    echo "  $0 \$APP_CREATOR_ADDRESS \$VERIFY_SC_ADDRESS \$APPEND_SC_ADDRESS"
+    echo "  $0 \$APP_CREATOR_ADDRESS"
     echo ""
     echo ""
 }
 
-if [ $# -ne 3 ]; then
+if [ $# -ne 1 ]; then
   usage
   exit 1
 fi
 
 creator=$1
-verify_sc_addr=$2
-append_sc_addr=$3
+
+goal_cmd="goal"
 
 # create app
 echo "Creating app..."
-app_id=$(goal app create --creator $creator --approval-prog ./mt_approval.teal --global-byteslices 2 --global-ints 1 --local-byteslices 0 --local-ints 0 --clear-prog ./mt_clear.teal| grep "Created app with app index" | awk '{ print $6 }')
+app_id=$($goal_cmd app create --creator $creator --approval-prog ./mt_approval5.teal --global-byteslices 1 --global-ints 1 --local-byteslices 0 --local-ints 0 --clear-prog ./mt_clear.teal| grep "Created app with app index" | awk '{ printf "%d", $6 }')
 echo "Created app $app_id"
 
-function group_sign_and_send {
-  # verify smart contract call
-  echo "Creating verify smart contract call"
-  goal clerk send -a 0 -F verify_sc.teal -t $verify_sc_addr -o verify_sc.tx
+echo "Creating dummy app..."
+dummy_app_id=$($goal_cmd app create --creator $creator --approval-prog ./mt_clear.teal --global-byteslices 0 --global-ints 0 --local-byteslices 0 --local-ints 0 --clear-prog ./mt_clear.teal | grep "Created app with app index" | awk '{ printf "%d", $6 }')
+echo "Created app $dummy_app_id"
 
-  # payment to verify smart contract
-  echo "Creating fee payment txn to the verify smart contract"
-  goal clerk send -a 1000 -f $creator -t $verify_sc_addr -o verify_fee_payment.tx
 
-  # append smart contract call
-  echo "Creating append smart contract call"
-  goal clerk send -a 0 -F append_sc.teal -t $append_sc_addr -o append_sc.tx
+function append {
+  record=$1
+  sib1=$2
+  sib2=$3
+  sib3=$4
 
-  # payment to append smart contract
-  echo "Creating fee payment txn to the append smart contract"
-  goal clerk send -a 1000 -f $creator -t $append_sc_addr -o append_fee_payment.tx
+  echo "appending $record"
+  $goal_cmd app call \
+    --app-id $app_id \
+    --app-arg "str:append" \
+    --app-arg "str:$record" \
+    --app-arg "b64:$sib1" \
+    --app-arg "b64:$sib2" \
+    --app-arg "b64:$sib3" \
+    --from $creator --out=app.tx
+
+  $goal_cmd app call \
+    --app-id $dummy_app_id \
+    --app-arg "str:1" \
+    --from $creator --out=app-cost-pool.tx
+  $goal_cmd app call \
+    --app-id $dummy_app_id \
+    --app-arg "str:2" \
+    --from $creator --out=app-cost-pool2.tx
 
   # group
   echo "Grouping them together"
-  cat app.tx verify_fee_payment.tx verify_sc.tx append_fee_payment.tx append_sc.tx > group.tx
-  goal clerk group -i group.tx -o group.tx.out
+  cat app.tx app-cost-pool.tx app-cost-pool2.tx > group.tx
+  $goal_cmd clerk group -i group.tx -o group.tx.out
 
   # split
   echo "Splitting them apart"
-  goal clerk split -i group.tx.out -o ungrp.tx
+  $goal_cmd clerk split -i group.tx.out -o ungrp.tx
 
   # sign
-  echo "Signing app call and fee payment txs"
-  goal clerk sign -i ungrp-0.tx -o ungrp-0.tx.sig
-  goal clerk sign -i ungrp-1.tx -o ungrp-1.tx.sig
-  goal clerk sign -i ungrp-3.tx -o ungrp-3.tx.sig
+  echo "Signing app calls"
+  $goal_cmd clerk sign -i ungrp-0.tx -o ungrp-0.tx.sig
+  $goal_cmd clerk sign -i ungrp-1.tx -o ungrp-1.tx.sig
+  $goal_cmd clerk sign -i ungrp-2.tx -o ungrp-2.tx.sig
 
   # join
   echo "Joining signed transactions to 1 file signed.grp"
-  cat ungrp-0.tx.sig ungrp-1.tx.sig ungrp-2.tx ungrp-3.tx.sig ungrp-4.tx > signed.grp
+  cat ungrp-0.tx.sig ungrp-1.tx.sig ungrp-2.tx.sig > signed.grp
   echo "signed.grp created!"
 
   # send
   echo "sending grouped transactions"
-  goal clerk rawsend -f signed.grp
+  $goal_cmd clerk rawsend -f signed.grp
   echo "sent"
-}
-
-function append {
-  current_root=$1
-  new_root=$2
-  record=$3
-  sib1=$4
-  sib2=$5
-  sib3=$6
-  sib4=$7
-  sib5=$8
-  sib6=$9
-  sib7=${10}
-  sib8=${11}
-  sib9=${12}
-  sib10=${13}
-  sib11=${14}
-
-  echo "appending $record"
-  goal app call \
-    --app-id $app_id \
-    --app-arg "str:append" \
-    --app-arg "b64:$current_root" \
-    --app-arg "b64:$new_root" \
-    --app-arg "str:$record" \
-    --app-arg "b64:$sib1" \
-    --app-arg "b64:$sib2" \
-    --app-arg "b64:$sib3" \
-    --from $creator --out=app.tx
-
-  group_sign_and_send
 
 }
 
 function verify {
-  current_root=$1
-  new_root=$2
-  record=$3
-  sib1=$4
-  sib2=$5
-  sib3=$6
-  sib4=$7
-  sib5=$8
-  sib6=$9
-  sib7=${10}
-  sib8=${11}
-  sib9=${12}
-  sib10=${13}
-  sib11=${14}
+  record=$1
+  sib1=$2
+  sib2=$3
+  sib3=$4
 
   echo "verifying $record"
-  goal app call \
+  $goal_cmd app call \
     --app-id $app_id \
     --app-arg "str:verify" \
-    --app-arg "b64:$current_root" \
-    --app-arg "b64:" \
     --app-arg "str:$record" \
     --app-arg "b64:$sib1" \
     --app-arg "b64:$sib2" \
     --app-arg "b64:$sib3" \
     --from $creator --out=app.tx
 
-  group_sign_and_send
+  $goal_cmd app call \
+    --app-id $dummy_app_id \
+    --app-arg "str:1" \
+    --from $creator --out=app-cost-pool.tx
+  $goal_cmd app call \
+    --app-id $dummy_app_id \
+    --app-arg "str:2" \
+    --from $creator --out=app-cost-pool2.tx
+
+  # group
+  echo "Grouping them together"
+  cat app.tx app-cost-pool.tx app-cost-pool2.tx > group.tx
+  $goal_cmd clerk group -i group.tx -o group.tx.out
+
+  # split
+  echo "Splitting them apart"
+  $goal_cmd clerk split -i group.tx.out -o ungrp.tx
+
+  # sign
+  echo "Signing app calls"
+  $goal_cmd clerk sign -i ungrp-0.tx -o ungrp-0.tx.sig
+  $goal_cmd clerk sign -i ungrp-1.tx -o ungrp-1.tx.sig
+  $goal_cmd clerk sign -i ungrp-2.tx -o ungrp-2.tx.sig
+
+  # join
+  echo "Joining signed transactions to 1 file signed.grp"
+  cat ungrp-0.tx.sig ungrp-1.tx.sig ungrp-2.tx.sig > signed.grp
+  echo "signed.grp created!"
+
+  # send
+  echo "sending grouped transactions"
+  $goal_cmd clerk rawsend -f signed.grp
+  echo "sent"
 
 }
 
-append "" "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "record0" "" "" ""
-verify "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "" "record0" "" "" ""
+function update {
+  old_record=$1
+  sib1=$2
+  sib2=$3
+  sib3=$4
+  new_record="${@: -1}"
 
-append "maaDdtN5k2cSsfdEy/XgeLusgjwee/GEXZYNBdiucLI=" "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "" ""
-verify "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "" ""
+  echo "updating $old_record"
+  $goal_cmd app call \
+    --app-id $app_id \
+    --app-arg "str:update" \
+    --app-arg "str:$old_record" \
+    --app-arg "b64:$sib1" \
+    --app-arg "b64:$sib2" \
+    --app-arg "b64:$sib3" \
+    --app-arg "str:$new_record" \
+    --from $creator --out=app.tx
 
-append "XZMWjv91MVyAibeqDx640mphixE9qSnd6Zfn0BILttI=" "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "record2" "" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
-verify "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "" "record2" "" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
+  $goal_cmd app call \
+    --app-id $dummy_app_id \
+    --app-arg "str:1" \
+    --from $creator --out=app-cost-pool.tx
+  $goal_cmd app call \
+    --app-id $dummy_app_id \
+    --app-arg "str:2" \
+    --from $creator --out=app-cost-pool2.tx
 
-append "952WQhtxb51LJjmVQwJ+8iqRU33abhWGGowEhFaEdDM=" "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
-verify "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" ""
+  # group
+  echo "Grouping them together"
+  cat app.tx app-cost-pool.tx app-cost-pool2.tx > group.tx
+  $goal_cmd clerk group -i group.tx -o group.tx.out
 
-append "y/Y2PGc1RGdUHJDfiUF4Ib2VVswaB9HGZsUyPLscJk8=" "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "record4" "" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "" "record4" "" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+  # split
+  echo "Splitting them apart"
+  $goal_cmd clerk split -i group.tx.out -o ungrp.tx
 
-append "+oAejua2I8HZTWSUjZEULxcERyvyf9saSdE1UrYQLZc=" "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+  # sign
+  echo "Signing app calls"
+  $goal_cmd clerk sign -i ungrp-0.tx -o ungrp-0.tx.sig
+  $goal_cmd clerk sign -i ungrp-1.tx -o ungrp-1.tx.sig
+  $goal_cmd clerk sign -i ungrp-2.tx -o ungrp-2.tx.sig
 
-append "EPr9MEIB9YSnmzv6R7qPgKadsrQffMO5nX8ijXpGcU8=" "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "record6" "" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "" "record6" "" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+  # join
+  echo "Joining signed transactions to 1 file signed.grp"
+  cat ungrp-0.tx.sig ungrp-1.tx.sig ungrp-2.tx.sig > signed.grp
+  echo "signed.grp created!"
 
-append "6E0/8fxYI4ZQrrZRJmL+8oE3xCaiKg+QcrC3EFsGD5Y=" "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+  # send
+  echo "sending grouped transactions"
+  $goal_cmd clerk rawsend -f signed.grp
+  echo "sent"
 
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record0" "qu0AOo9K4Xej8xNE6RClMgwuzlcvi3hgFC17fBOKL6hQ" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record2" "qlU+XIurZ96YJ7hPo2graSpKwnNUL6yvx48ly2TAhJjH" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record4" "qthHJFPMJC6Dc06ENnmKQI/2+oeWH5/cLKTWaIDUgita" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record6" "qhRxHkgVYhMAPe10rIAsSc1zscHRE+NZmlVOsJ8lTzO1" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
-verify "hvRZlDZBo2Z2N6fvgvw9w45y79B8HqQUU4RmJrh9SZ4=" "" "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+}
+append "record0" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record0" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record2" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record2" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qlMQozDo+XA4hQPHM0nYC0XNdk22FfG87SgB3NRSSi/0"
+append "record4" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record4" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "qi26XbwznnMWrqJoP6+DnBt7HuIxPbeSESWIEY3wZqo1" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record6" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record6" "quOwxEKY/BwUmvv0yJlvuSQnrkHkZJuTTKSVmRt4UrhV" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record0" "qu0AOo9K4Xej8xNE6RClMgwuzlcvi3hgFC17fBOKL6hQ" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+append "record1" "u6KKwPqiKMcM27iAaNhdlcK4svf+M228XM1aCZnFIQhf" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+append "record2" "qlU+XIurZ96YJ7hPo2graSpKwnNUL6yvx48ly2TAhJjH" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+append "record3" "u5IE0imKp4/r0cg+Sfwt2e7kBeyun/8T/I96TIxoB/Ar" "u4CK87RS/QiCJAvN+F/B1TaJL+SJoxBwNbJnv5BmXe8i" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF"
+append "record4" "qthHJFPMJC6Dc06ENnmKQI/2+oeWH5/cLKTWaIDUgita" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record5" "u2NOmDk9wdN+y7dy+XDgffwtsoq2qO+lhAZJ99XmTG9C" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record6" "qhRxHkgVYhMAPe10rIAsSc1zscHRE+NZmlVOsJ8lTzO1" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+append "record7" "u19BsA4Tmma4CurYsTUGhwTmAz00sfzPN92APg/QHglf" "u7BULGbcLhN0Emhl48KVicG5AydyOlN4SmfHAuVz3E5i" "u8UPwPey01LNNP4zMvAa4YNrpvxb3GnT3oilanM3kaL5"
+update "record0" "qu0AOo9K4Xej8xNE6RClMgwuzlcvi3hgFC17fBOKL6hQ" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF" "record00"
+update "record1" "u1kciTLxlPFwB9Zs0XF9kdPt8C1dds5ADXSOG6hAR5O4" "quA5ByEEZoif2l0XHKZWpc3P61HFQCFPJNnqaXCJJnju" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF" "record11"
+update "record2" "qlU+XIurZ96YJ7hPo2graSpKwnNUL6yvx48ly2TAhJjH" "u6tKt1Vu7xob+2V7FeHwaNLlWw9ogpKv0MSD9sW/uNlc" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF" "record22"
+update "record3" "u1ReJTaWJefFmqAQyfr8ZP9eTRecR94MXd7gL9bg9ee4" "u6tKt1Vu7xob+2V7FeHwaNLlWw9ogpKv0MSD9sW/uNlc" "qhqq1HghiS8VjPVhEKuP+hmb+jXCYohnPnve4jDYHZrF" "record33"
+update "record4" "qthHJFPMJC6Dc06ENnmKQI/2+oeWH5/cLKTWaIDUgita" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs" "record44"
+update "record5" "u/xMCx1XuECm8LtT0voleZ4AgUKjn1zrw4sUU1rXCY9n" "qglS1xu5j0JgfN/0zVwGc6x0y/wxvirRdU5qFJ/038Fq" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs" "record55"
+update "record6" "qhRxHkgVYhMAPe10rIAsSc1zscHRE+NZmlVOsJ8lTzO1" "u08NwtfETndkYWgH0he2CQP03D5GIbC7TmMsttw1LQav" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs" "record66"
+update "record7" "uywfSO7dr7zwTAP0rDrK+oC+3A1lRzpouGY6Z7XqhTLv" "u08NwtfETndkYWgH0he2CQP03D5GIbC7TmMsttw1LQav" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs" "record77"
+append "record00" "qpGIoq5ATI6oWy0eW4ZPkYO4K+jr4oXLMXPzsxZI4m5L" "qhekyP0v4r0dGJDl9UiDGTuT0+2cZBgLOO45CaltIRYo" "qsye9ELFZyM1MBBTSIDrzT8Gg4ClfwbYH7MXn+Aoya9n"
+append "record11" "u1kciTLxlPFwB9Zs0XF9kdPt8C1dds5ADXSOG6hAR5O4" "qhekyP0v4r0dGJDl9UiDGTuT0+2cZBgLOO45CaltIRYo" "qsye9ELFZyM1MBBTSIDrzT8Gg4ClfwbYH7MXn+Aoya9n"
+append "record22" "qo81xL2gtHq35O3ZUTARKTY4bWyDsutZmaKUYfnR01Jv" "u6tKt1Vu7xob+2V7FeHwaNLlWw9ogpKv0MSD9sW/uNlc" "qsye9ELFZyM1MBBTSIDrzT8Gg4ClfwbYH7MXn+Aoya9n"
+append "record33" "u1ReJTaWJefFmqAQyfr8ZP9eTRecR94MXd7gL9bg9ee4" "u6tKt1Vu7xob+2V7FeHwaNLlWw9ogpKv0MSD9sW/uNlc" "qsye9ELFZyM1MBBTSIDrzT8Gg4ClfwbYH7MXn+Aoya9n"
+append "record44" "qkmdhWiPeDZvQA6A06dzQKo1ZOIJxjpcPGVmIPkpeYW/" "qs4rT2RnXfeYuCEF4QdIHYrQQdi7wcmYclw1fpVA789k" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs"
+append "record55" "u/xMCx1XuECm8LtT0voleZ4AgUKjn1zrw4sUU1rXCY9n" "qs4rT2RnXfeYuCEF4QdIHYrQQdi7wcmYclw1fpVA789k" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs"
+append "record66" "qn0ylyaZ+DxkoA17aiT/fC1OAqtIpVHYbcaiPAGsB5ww" "u08NwtfETndkYWgH0he2CQP03D5GIbC7TmMsttw1LQav" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs"
+append "record77" "uywfSO7dr7zwTAP0rDrK+oC+3A1lRzpouGY6Z7XqhTLv" "u08NwtfETndkYWgH0he2CQP03D5GIbC7TmMsttw1LQav" "u31WdMSCQeYFoKtiOvVxTkPCJ9xVLVwbd053WRdBoUzs"

@@ -1,2 +1,2 @@
 py-algorand-sdk==1.4.1
-git+git://github.com/algorand/pyteal.git@120202c#egg=pyteal
+pyteal==0.9.0
