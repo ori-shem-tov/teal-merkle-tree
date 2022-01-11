@@ -56,33 +56,40 @@ Make sure `CREATOR_ADDRESS` is funded to meet the minimum balance constraint.
 
 In the next section we'll try to visualize the structure of our implementation.
 
-We'll be looking on a tree of height 3, with maximum of 8 records.
+We'll be looking on a tree of height 2, with maximum of 4 records.
 
 `0` denotes an empty byte array
 
-`|` denotes concatenation
-
-<code>H<sub>i</sub></code> denotes the `SHA256` of `Record #i`
+`+` denotes concatenation
 
 #### Init
-Starting with an empty tree, root value is an empty byte array:
+Starting with an empty tree:
 
-![Init](init.svg)
+![Init](merkle-empty.svg)
+
+At the beginning each leaf is the output of `SHA256` of an empty byte array.
 
 #### First record
-First record is added, meaning its hash is stored in the leftmost leaf.
-Each leaf with no value and each non-leaf with only empty leaves in its subtree is considered as `0`.
-![First record](first.svg)
+First record is added, meaning its hash is stored in the leftmost leaf and all nodes on the path to root are updated:
+1. **Hash 0-0** is updated to be the output of `SHA256` of `record0`.
+2. **Hash 0** is updated to be the output of `SHA256` of the concatenation of the new **Hash 0-0** and **Hash 0-1** (the output of `SHA256` of an empty byte array).
+3. **Root** is updated to be the output of `SHA256` of the concatenation of the new **Hash 0** and **Hash 1** (unchanged).
+
+Again, each leaf with no value is the output of `SHA256` of an empty byte array.
+
+![First record](merkle1.svg)
 
 #### Second record
-Second record is added. Now <code>H<sub>0-1</sub></code> is the `SHA256` of the concatenation of <code>H<sub>0</sub></code> and <code>H<sub>1</sub></code>,
-and all nodes on the path to root are updated.
-![Second record](second.svg)
+Second record is added. Now **Hash 0-1** is updated to be the output of `SHA256` of `record1`,
+and all nodes on the path to root are updated (**Hash 0-1**, **Hash 0** and **Root**).
+
+![Second record](merkle2.svg)
 
 #### Third record
-Third record is added. <code>H<sub>2-3</sub></code> is revealed and is no longer considered as `0`.
-Again all nodes on the path to root are updated.
-![Third record](third.svg)
+Third record is added. **Hash 1-0** is updated to be the output of `SHA256` of `record1`.
+Again all nodes on the path to root are updated (**Hash 1-0**, **Hash 1** and **Root**).
+
+![Third record](merkle3.svg)
 
 #### Full tree
-![Full tree](full.svg)
+![Full tree](merkle-full.svg)

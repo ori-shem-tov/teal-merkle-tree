@@ -14,6 +14,11 @@ UPDATE_VALUE_INDEX = NUM_APP_ARGS_UPDATE - 1
 
 
 @Subroutine(TealType.bytes)
+def hash_concat(left: TealType.bytes, right: TealType.bytes):
+    return Sha256(Concat(left, right))
+
+
+@Subroutine(TealType.bytes)
 def calc_root(init_value: Expr):
     """
     Calculates the root of the Merkle tree from a specific leaf.
@@ -24,27 +29,25 @@ def calc_root(init_value: Expr):
     i = ScratchVar(TealType.uint64)
     result = ScratchVar(TealType.bytes)
 
+    init = i.store(Int(FIRST_SIBLING_INDEX))
+    cond = i.load() <= Int(LAST_SIBLING_INDEX)
+    itr = i.store(i.load() + Int(1))
+
     return Seq([
         result.store(init_value),
         # go over all siblings along the path to the top hash
-        For(i.store(Int(FIRST_SIBLING_INDEX)), i.load() <= Int(LAST_SIBLING_INDEX), i.store(i.load() + Int(1))).Do(
-            # if a sibling starts with 0xaa byte, then it's a right sibling.
-            If(Substring(Txn.application_args[i.load()], Int(0), Int(1)) == Bytes('base16', 'aa')).Then(
-                result.store(
-                    Sha256(
-                        Concat(
-                            result.load(),
-                            Substring(Txn.application_args[i.load()], Int(1), Int(33))
-                        )
+        For(init, cond, itr).Do(
+            # if a sibling starts with 0xaa (170) byte, then it's a right sibling.
+            result.store(
+                If(GetByte(Txn.application_args[i.load()], Int(0)) == Int(170)).Then(
+                    hash_concat(
+                        result.load(),
+                        Extract(Txn.application_args[i.load()], Int(1), Int(32)),
                     )
-                )
-            ).Else(
-                result.store(
-                    Sha256(
-                        Concat(
-                            Substring(Txn.application_args[i.load()], Int(1), Int(33)),
-                            result.load()
-                        )
+                ).Else(
+                    hash_concat(
+                        Extract(Txn.application_args[i.load()], Int(1), Int(32)),
+                        result.load(),
                     )
                 )
             )
