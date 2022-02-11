@@ -1,6 +1,6 @@
 # Merkle Trees
 
-Link to Solution in the dev portal: [https://developer.algorand.org/solutions/storing-a-large-amount-of-data-on-the-blockchain-using-merkle-trees/](https://developer.algorand.org/solutions/storing-a-large-amount-of-data-on-the-blockchain-using-merkle-trees/)
+Link to Solution in the dev portal: [post](https://developer.algorand.org/solutions/committing-to-large-datasets-using-merkle-trees-in-pyteal/)
 
 ## Requirements
 Install requirements.txt
@@ -65,7 +65,7 @@ We'll be looking on a tree of height 2, with maximum of 4 records.
 #### Init
 Starting with an empty tree:
 
-![Init](merkle-empty.svg)
+![Init](./init.svg)
 
 At the beginning each leaf is the output of `SHA256` of an empty byte array.
 
@@ -77,19 +77,19 @@ First record is added, meaning its hash is stored in the leftmost leaf and all n
 
 Again, each leaf with no value is the output of `SHA256` of an empty byte array.
 
-![First record](merkle1.svg)
+![First record](./first.svg)
 
 #### Second record
 Second record is added. Now **Hash 0-1** is updated to be the output of `SHA256` of `record1`,
 and all nodes on the path to root are updated (**Hash 0-1**, **Hash 0** and **Root**).
 
-![Second record](merkle2.svg)
+![Second record](./second.svg)
 
 #### Third record
 Third record is added. **Hash 1-0** is updated to be the output of `SHA256` of `record1`.
 Again all nodes on the path to root are updated (**Hash 1-0**, **Hash 1** and **Root**).
 
-![Third record](merkle3.svg)
+![Third record](./third.svg)
 
 #### Full tree
-![Full tree](merkle-full.svg)
+![Full tree](./full.svg)
